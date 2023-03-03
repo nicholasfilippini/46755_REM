@@ -2,83 +2,100 @@
 using JuMP
 using Gurobi
 using Printf
+using CSV, DataFrames
+using Plots
 
 
 #**************************************************
-
-# Define node and transmission data in the 24-bus system
-
-conv_gen_node = [1, 2, 7, 13, 15, 15, 16, 18, 21, 22, 23, 23]   # Node location of conventional generators in the 24-bus system
-wind_node = [3, 5, 7, 16, 21, 23]   # Node location of wind farms in the 24-bus system
-demand_node = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 18, 19, 20]   # Node location of demand in the 24-bus system
-
-transm_capacity =  [[0 175 175 0 350 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [175 0 0 175 0 175 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [175 0 0 0 0 0 0 0 175 0 0 0 0 0 0 0 0 0 0 0 0 0 0 400];
-                    [0 175 0 0 0 0 0 0 175 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [350 0 0 0 0 0 0 0 0 350 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [0 175 0 0 0 0 0 0 0 175 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [0 0 0 0 0 0 0 350 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [0 0 0 0 0 0 350 0 175 175 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [0 0 175 175 0 0 0 175 0 0 400 400 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [0 0 0 0 350 175 0 175 0 0 400 400 0 0 0 0 0 0 0 0 0 0 0 0];
-                    [0 0 0 0 0 0 0 0 400 400 0 0 500 500 0 0 0 0 0 0 0 0 0 0];
-                    [0 0 0 0 0 0 0 0 400 400 0 0 500 0 0 0 0 0 0 0 0 0 500 0];
-                    [0 0 0 0 0 0 0 0 0 0 500 500 0 0 0 0 0 0 0 0 0 0 500 0];
-                    [0 0 0 0 0 0 0 0 0 0 500 0 0 0 0 500 0 0 0 0 0 0 0 0];
-                    [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 500 0 0 0 0 1000 0 0 500];
-                    [0 0 0 0 0 0 0 0 0 0 0 0 0 250 500 0 500 0 500 0 0 0 0 0];
-                    [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 500 0 500 0 0 0 500 0 0];
-                    [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 500 0 0 0 1000 0 0 0];
-                    [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 500 0 0 0 1000 0 0 0 0];
-                    [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1000 0 0 0 1000 0];
-                    [0 0 0 0 0 0 0 0 0 0 0 0 0 0 400 0 0 1000 0 0 0 500 0 0];
-                    [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 500 0 0 0 500 0 0 0];
-                    [0 0 0 0 0 0 0 0 0 0 0 500 250 0 0 0 0 0 0 1000 0 0 0 0];
-                    [0 0 400 0 0 0 0 0 0 0 0 0 0 0 500 0 0 0 0 0 0 0 0 0]] # Capacity of transmission lines between each node in MW
-
-
+#Get Data
+include("Data_ass1.2.jl")
 #**************************************************
-
-# Conventional Generator Set [1:12]
-#G = length(conv_gen_cap)
-
-# Wind farm set
-#W = length(wind_cap)
-
-# Demand set
-#D = length(demand_cons)
-
-# Number of hours in a day
+# Time set 
 T = 24
 
-# Number of nodes
+# Conventional Generator Set [24:12]
+G = 12
+
+# Wind farm set [24 : 6]
+W = 6
+
+# Demand set [24 : 17]
+D = 17
+
+# Hydrogen set [24 : 2]
+H = 2
+
+# Node set
 N = 24
+
+# Sucseptance
+B = 500
+
+# electrolizer required production
+electrolizer_minmass_prod = 30000                       # Minimum hydrogen daily mass production (kg)
+electrolizer_minpow_cons = electrolizer_minmass_prod/18 # Minimum hydrogen daily energy consumption (MW)
+hyd_rev_kg = 0                                         # Revenue per kg of hydrogen (USD)
+hyd_rev_mw = hyd_rev_kg * 18                            # Revenue per MW of hydrogen (USD)
 
 #**************************************************
 # MODEL
-Step3=Model(Gurobi.Optimizer)
+Step3Nodal=Model(Gurobi.Optimizer)
+
+#**************************************************
 
 #Variables - power in MW
-@variable(Step3,pg[g=1:G, t=1:T]>=0) #Hourly power generation - Conventional generator g at hour t
-@variable(Step3,pw[w=1:W, t=1:T] >=0) #Hourly power generation - Wind farm w at hour t
-@variable(Step3,pd[d=1:D, t=1:T] >=0) #Hourly power demand from load d at hour t
-@variable(Step3,theta[n=1:N, t=1:T] >=0) #Hourly power angle at node n at hour t
+@variable(Step3Nodal,pg[t=1:T,g=1:G] >=0)      #Hourly power generation - Conventional generator g (MW)
+@variable(Step3Nodal,pw[t=1:T,w=1:W] >=0)      #Hourly power generation - Wind farm w (MW) 
+@variable(Step3Nodal,h[t=1:T,w=1:H] >=0)       #Hourly power demand for electrolizer (MW)
+@variable(Step3Nodal,pd[t=1:T,d=1:D] >=0)      #Hourly power demand (MW)
+@variable(Step3Nodal,theta[n=1:N,t=1:T] >=0)   #Voltage angle of node n at time t
+
+#**************************************************
 
 #Objective function
-@objective(Step1, Max, sum(demand_bid[d] * pd[d] for d=1:D)  #Total offer value 
-                    -sum(conv_gen_cost[g] * pg[g] for g=1:G) #Total value of conventional generator production
-                    -sum(wind_cost[w] * pw[w] for w=1:W)    #Total value of wind energy production
-                    )
+@objective(Step3Nodal, Max, 
+sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)                 #Total offer value 
+-sum(conv_gen_cost_hour[t,g] * pg[t,g] for t=1:T,g=1:G)             #Total value of conventional generator production
+-sum(wind_cost_hour[t,w] * pw[t,w] for t=1:T,w=1:W)              #Total value of wind energy production         
+)
 
 # Capacity constraints
-@constraint(Step1,[d=1:D], 0 <= pd[d] <= demand_cons[d] ) # Capacity for demand
-@constraint(Step1, [g=1:G], 0 <= pg[g] <= conv_gen_cap[g] ) # (Capacity for conventional generator
-@constraint(Step1,[w=1:W], 0 <= pw[w] <= wind_forecast[w] ) # Capacity for Wind farms
+@constraint(Step3Nodal,[t=1:T,d=1:D], 0 <= pd[t,d] <= demand_cons_hour[t,d] )               # Capacity for demand (MW)
+@constraint(Step3Nodal,[t=1:T,g=1:G], 0 <= pg[t,g] <= conv_gen_cap_hour[t,g] )              # Capacity for conventional generator (MW)
+@constraint(Step3Nodal,[t=1:T,w=1:W], 0 <= pw[t,w] <= wind_forecast_hour[t,w] )             # Capacity for Wind farms without electrolizer (MW)
+@constraint(Step3Nodal,[w=1:H], electrolizer_minpow_cons <= sum(h[t,w] for t=1:T))              # Minimum energy used by electrolizer (MW)
+@constraint(Step3Nodal,[t=1:T,w=1:H], h[t,w] <= (wind_forecast_hour[t,w]/2))                     # Electrolizer capacity is max hald of wf capacity
+
+# Transmission capacity constraint
+@constraint(Step3Nodal, [t=1:T,n=1:N,m=1:N], -transm_capacity[n,m] <= B * (theta[n,t] - theta[m,t]) <= transm_capacity[n,m])
+
+# Voltage angle constraint
+@constraint(Step3Nodal, [t=1:T,n=1:N], -pi <= theta[n,t] <= pi)
+
+# Reference constraint
+@constraint(Step3Nodal, [t=1:T], theta[1,t] == 0)
 
 # Elasticity constraint, balancing supply and demand
-@constraint(Step3, powerbalance,
-                0 == sum(pd[d] for t=1:T, d=1:D) - # Demand
-                sum(pg[g] for t=1:T, g=1:G) - # Conventional generator production
-                sum(pw[w] for t=1:T, w=1:W) # Wind production
+@constraint(Step3Nodal, powerbalance[n=1:N,t=1:T],
+                0 == sum(pd[t,d] for d=1:D) + # Demand
+                sum(h[t,w] for w=1:H) + # Hydrogen demand
+                sum(B * (theta[n,t] - theta[m,t]) for m=1:N) - # Transmission lines
+                sum(pg[t,g] for g=1:G) - # Conventional generator production
+                sum(pw[t,w] for w=1:W) # Wind production
                 )
+
+
+#************************************************************************
+# Solve
+solution = optimize!(Step3Nodal)
+#**************************************************
+
+# Constructing outputs:
+market_price = zeros(T)
+
+#Check if optimal solution was found
+if termination_status(Step3Nodal) == MOI.OPTIMAL
+    println("Optimal solution found")
+else
+    error("No solution.")
+end
