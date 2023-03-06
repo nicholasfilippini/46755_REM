@@ -48,7 +48,7 @@ Step3Nodal=Model(Gurobi.Optimizer)
 @variable(Step3Nodal,pw[t=1:T,w=1:W] >=0)      #Hourly power generation - Wind farm w (MW) 
 @variable(Step3Nodal,h[t=1:T,w=1:H] >=0)       #Hourly power demand for electrolizer (MW)
 @variable(Step3Nodal,pd[t=1:T,d=1:D] >=0)      #Hourly power demand (MW)
-@variable(Step3Nodal,theta[n=1:N,t=1:T] >=0)   #Voltage angle of node n at time t
+@variable(Step3Nodal,theta[t=1:T, n=1:N])   #Voltage angle of node n at time t
 
 #**************************************************
 
@@ -67,21 +67,21 @@ sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)                 #Total offer
 @constraint(Step3Nodal,[t=1:T,w=1:H], h[t,w] <= (wind_forecast_hour[t,w]/2))                     # Electrolizer capacity is max hald of wf capacity
 
 # Transmission capacity constraint
-@constraint(Step3Nodal, [t=1:T,n=1:N,m=1:N], -transm_capacity[n,m] <= B * (theta[n,t] - theta[m,t]) <= transm_capacity[n,m])
+@constraint(Step3Nodal, [t=1:T,n=1:N,m=1:N], -transm_capacity[n,m] <= B * (theta[t, n] - theta[t, m]) <= transm_capacity[n,m])
 
 # Voltage angle constraint
-@constraint(Step3Nodal, [t=1:T,n=1:N], -pi <= theta[n,t] <= pi)
+@constraint(Step3Nodal, [t=1:T,n=1:N], -pi <= theta[t, n] <= pi)
 
-# Reference constraint
-@constraint(Step3Nodal, [t=1:T], theta[1,t] == 0)
+# Reference constraintnode
+@constraint(Step3Nodal, [t=1:T], theta[t, 1] == 0)
 
 # Elasticity constraint, balancing supply and demand
 @constraint(Step3Nodal, powerbalance[n=1:N,t=1:T],
-                0 == sum(pd[t,d] for d=1:D) + # Demand
-                sum(h[t,w] for w=1:H) + # Hydrogen demand
-                sum(B * (theta[n,t] - theta[m,t]) for m=1:N) - # Transmission lines
-                sum(pg[t,g] for g=1:G) - # Conventional generator production
-                sum(pw[t,w] for w=1:W) # Wind production
+                0 == sum(pd[t,d] for d in node_dem[n]) + # Demand
+                sum(h[t,w] for w in node_hyd[n]) + # Hydrogen demand
+                sum(B * (theta[t, n] - theta[t, m]) for m in node_transm[n]) - # Transmission lines
+                sum(pg[t,g] for g in node_conv[n]) - # Conventional generator production
+                sum(pw[t,w] for w in node_wind[n]) # Wind production
                 )
 
 
@@ -98,4 +98,27 @@ if termination_status(Step3Nodal) == MOI.OPTIMAL
     println("Optimal solution found")
 else
     error("No solution.")
+end
+
+# Print objective value
+println("Objective value: ", objective_value(Step3Nodal))
+
+# Print market clearing price 
+for t=1:T
+    market_price[t] = objective_value(Step3Nodal) / demand_cons_hour[t,1]
+    println("Market clearing price for hour ", t, " is ", market_price[t])
+end
+
+# print voltage angle
+for t=1:T
+    for n=1:N
+    println("Voltage angle for node ", n, " at hour ", t, " is ", value(theta[n,t]))
+    end
+end
+
+# print demand
+for t=1:T
+    for d=1:D
+    println("Demand ", d, " at hour ", t, " is ", value(pd[d,t]))
+    end
 end
