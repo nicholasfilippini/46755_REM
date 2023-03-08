@@ -67,7 +67,17 @@ sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)                 #Total offer
 @constraint(Step3Nodal,[t=1:T,w=1:H], h[t,w] <= (wind_forecast_hour[t,w]/2))                     # Electrolizer capacity is max hald of wf capacity
 
 # Transmission capacity constraint
-@constraint(Step3Nodal, [t=1:T,n=1:N,m=1:N], -transm_capacity[n,m] <= B * (theta[t, n] - theta[t, m]) <= transm_capacity[n,m])
+for t=1:T
+    for n=1:N
+        for m=1:N
+            if transm_capacity[n,m] != 0
+                @constraint(Step3Nodal,
+                -transm_capacity[n,m] <= B * (theta[t, n] - theta[t, m]) <= transm_capacity[n,m])
+            end
+        end
+    end
+end
+#@constraint(Step3Nodal, transcap[t=1:T,n=1:N,m=1:N], -transm_capacity[n,m] <= B * (theta[t, n] - theta[t, m]) <= transm_capacity[n,m])
 
 # Voltage angle constraint
 @constraint(Step3Nodal, [t=1:T,n=1:N], -pi <= theta[t, n] <= pi)
@@ -75,13 +85,29 @@ sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)                 #Total offer
 # Reference constraintnode
 @constraint(Step3Nodal, [t=1:T], theta[t, 1] == 0)
 
+# Create a function that returns the connected nodes in an ingoing and outgoing direction
+connections = length(transm_connections)
+function connected_nodes(node)
+    outgoing = []
+    ingoing = []
+    for i=1:connections
+        if node == transm_connections[i][1]
+            push!(outgoing, transm_connections[i][2])
+        elseif node == transm_connections[i][2]
+            push!(ingoing, transm_connections[i][1])
+        end
+    end
+    return(outgoing, ingoing)
+end
+
 # Elasticity constraint, balancing supply and demand
-@constraint(Step3Nodal, powerbalance[n=1:N,t=1:T],
-                0 == sum(pd[t,d] for d in node_dem[n]) + # Demand
-                sum(h[t,w] for w in node_hyd[n]) + # Hydrogen demand
-                sum(B * (theta[t, n] - theta[t, m]) for m in node_transm[n]) - # Transmission lines
-                sum(pg[t,g] for g in node_conv[n]) - # Conventional generator production
-                sum(pw[t,w] for w in node_wind[n]) # Wind production
+@constraint(Step3Nodal, powerbalance[t=1:T, n=1:N],
+                0 == sum(pd[t, d] for d in node_dem[n]) + # Demand
+                sum(h[t, w] for w in node_hyd[n]) + # Hydrogen demand
+                sum(B * (theta[t, n] - theta[t, m]) for m in connected_nodes(n)[2]) - # Ingoing transmission lines
+                sum(B * (theta[t, m] - theta[t, n]) for m in connected_nodes(n)[1]) - # Outgoing transmission lines
+                sum(pg[t, g] for g in node_conv[n]) - # Conventional generator production
+                sum(pw[t, w] for w in node_wind[n]) # Wind production
                 )
 
 
@@ -96,29 +122,19 @@ market_price = zeros(T)
 #Check if optimal solution was found
 if termination_status(Step3Nodal) == MOI.OPTIMAL
     println("Optimal solution found")
-else
-    error("No solution.")
-end
 
-# Print objective value
-println("Objective value: ", objective_value(Step3Nodal))
+    # Print objective value
+    println("Objective value: ", objective_value(Step3Nodal))
 
-# Print market clearing price 
-for t=1:T
-    market_price[t] = objective_value(Step3Nodal) / demand_cons_hour[t,1]
-    println("Market clearing price for hour ", t, " is ", market_price[t])
-end
-
-# print voltage angle
-for t=1:T
-    for n=1:N
-    println("Voltage angle for node ", n, " at hour ", t, " is ", value(theta[n,t]))
+    # Print hourly market price in each node
+    println("Hourly Market clearing price")
+    market_price = dual.(powerbalance[:])
+    for t = 1:T
+        for n=1:N
+            println("t$t, n$n: ", dual(powerbalance[t,n]))
+        end
     end
-end
 
-# print demand
-for t=1:T
-    for d=1:D
-    println("Demand ", d, " at hour ", t, " is ", value(pd[d,t]))
-    end
+else 
+    println("No optimal solution found")
 end
