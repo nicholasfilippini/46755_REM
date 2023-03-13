@@ -58,8 +58,8 @@ sum(rgd[t,g] * pdownwardconv[t,g] for t=1:T,g=1:G)            #Total cost of dow
 @constraint(Step5Reserves,[t=1:T,g=1:G], 0 <= rgu[t,g] <= Conv_gen_downward_capability[t,g] )                               # downward capability for conventional units (MW)
 @constraint(Step5Reserves,[t=1:T,w=1:H], 0 <= rwu[t,w] <= Elect_upward_capability[t,w] )                                    # upnward capability for electrolizer units (MW)
 @constraint(Step5Reserves,[t=1:T,w=1:H], 0 <= rwd[t,w] <= Elect_downward_capability[t,w] )                                  # downward capability for electrolizer units (MW)
-@constraint(Step5Reserves,[t=1:T,g=1:G,w=1:H], sum(rgd[t,g]) + sum(rwd[t,w]) == 0.15*sum(demand_cons_hour[t, 1:D]))         # Total upnward reserve equal to  15% of total load
-@constraint(Step5Reserves,[t=1:T,g=1:G,w=1:H], sum(rgu[t,g]) + sum(rwu[t,w]) == 0.2*sum(demand_cons_hour[t, 1:D]))          # Total upnward reserve equal to  20% of total load
+@constraint(Step5Reserves,[t=1:T], sum(rgd[t,g] for g=1:G) + sum(rwd[t,w] for w=1:H) == 0.15*sum(demand_cons_hour[t, 1:D]))         # Total upnward reserve equal to  15% of total load
+@constraint(Step5Reserves,[t=1:T], sum(rgu[t,g] for g=1:G) + sum(rwu[t,w] for w=1:H) == 0.2*sum(demand_cons_hour[t, 1:D]))          # Total upnward reserve equal to  20% of total load
 
 #************************************************************************
 # Solve
@@ -77,16 +77,16 @@ if termination_status(Step5Reserves) == MOI.OPTIMAL
     # Print hourly reserves ( upnward and downward) for each one of the conventional units 
     for t = 1: T
          for g = 1 : G
-             println("t$t, conventional unit $g, downward reserve : ", value(rgd[t,g]))
-             println("t$t, conventional unit $g, upward reserve : ",   value(rgu[t,g]))
+             println("t$t, conventional unit $g, downward reserve : ", value.(rgd[t,g]))
+             println("t$t, conventional unit $g, upward reserve : ",   value.(rgu[t,g]))
         end
     end  
 
     # Print hourly reserves ( upnward and downward) for the two electolizers 
     for t = 1: T
          for w = 1 : H
-             println("t$t, electrolizer $w, upward reserve: ", value(rwu[t,w]))
-              println("t$t, electrolizer $w, upward reserve: ", value(rwd[t,w]))
+             println("t$t, electrolizer $w, upward reserve: ", value.(rwu[t,w]))
+              println("t$t, electrolizer $w, upward reserve: ", value.(rwd[t,w]))
         end
     end  
 
