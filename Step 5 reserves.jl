@@ -1,4 +1,3 @@
-#Import libraries
 using JuMP
 using Gurobi
 using Printf
@@ -66,6 +65,10 @@ sum(rgd[t,g] * pdownwardconv[t,g] for t=1:T,g=1:G)            #Total cost of dow
 solution = optimize!(Step5Reserves)
 #**************************************************
 
+rgU_star = zeros((T,G))
+rgD_star = zeros((T,G))
+rwU_star = zeros((T,H))
+rwD_star = zeros((T,H))
 
 #Check if optimal solution was found
 if termination_status(Step5Reserves) == MOI.OPTIMAL
@@ -73,6 +76,12 @@ if termination_status(Step5Reserves) == MOI.OPTIMAL
 
     # Print objective value
     println("Objective value: ", objective_value(Step5Reserves))
+
+    # Save optimal reserve variables.
+    rgU_star = value.(rgu[:,:])
+    rgD_star = value.(rgd[:,:])
+    rwU_star = value.(rwu[:,:])
+    rwD_star = value.(rwd[:,:])
 
     # Print hourly reserves ( upnward and downward) for each one of the conventional units 
     for t = 1: T
@@ -85,8 +94,8 @@ if termination_status(Step5Reserves) == MOI.OPTIMAL
     # Print hourly reserves ( upnward and downward) for the two electolizers 
     for t = 1: T
          for w = 1 : H
-             println("t$t, electrolizer $w, upward reserve: ", value.(rwu[t,w]))
-              println("t$t, electrolizer $w, upward reserve: ", value.(rwd[t,w]))
+            println("t$t, electrolizer $w, upward reserve: ", value.(rwu[t,w]))
+            println("t$t, electrolizer $w, upward reserve: ", value.(rwd[t,w]))
         end
     end  
 
@@ -94,6 +103,3 @@ if termination_status(Step5Reserves) == MOI.OPTIMAL
 else 
     println("No optimal solution found")
 end
- 
-
-
