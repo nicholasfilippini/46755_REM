@@ -57,8 +57,8 @@ sum(rgd[t,g] * pdownwardconv[t,g] for t=1:T,g=1:G)            #Total cost of dow
 @constraint(Step5Reserves,[t=1:T,g=1:G], 0 <= rgu[t,g] <= Conv_gen_downward_capability[t,g] )                               # downward capability for conventional units (MW)
 @constraint(Step5Reserves,[t=1:T,w=1:H], 0 <= rwu[t,w] <= Elect_upward_capability[t,w] )                                    # upnward capability for electrolizer units (MW)
 @constraint(Step5Reserves,[t=1:T,w=1:H], 0 <= rwd[t,w] <= Elect_downward_capability[t,w] )                                  # downward capability for electrolizer units (MW)
-@constraint(Step5Reserves,[t=1:T], sum(rgd[t,g] for g=1:G) + sum(rwd[t,w] for w=1:H) == 0.15*sum(demand_cons_hour[t, 1:D]))         # Total upnward reserve equal to  15% of total load
-@constraint(Step5Reserves,[t=1:T], sum(rgu[t,g] for g=1:G) + sum(rwu[t,w] for w=1:H) == 0.2*sum(demand_cons_hour[t, 1:D]))          # Total upnward reserve equal to  20% of total load
+@constraint(Step5Reserves, downward[t=1:T], sum(rgd[t,g] for g=1:G) + sum(rwd[t,w] for w=1:H) == 0.15*sum(demand_cons_hour[t, 1:D]))         # Total upnward reserve equal to  15% of total load
+@constraint(Step5Reserves, upward[t=1:T], sum(rgu[t,g] for g=1:G) + sum(rwu[t,w] for w=1:H) == 0.2*sum(demand_cons_hour[t, 1:D]))          # Total upnward reserve equal to  20% of total load
 
 #************************************************************************
 # Solve
@@ -69,6 +69,8 @@ rgU_star = zeros((T,G))
 rgD_star = zeros((T,G))
 rwU_star = zeros((T,H))
 rwD_star = zeros((T,H))
+price_up = zeros(T)
+price_down = zeros(T)
 
 #Check if optimal solution was found
 if termination_status(Step5Reserves) == MOI.OPTIMAL
@@ -77,11 +79,13 @@ if termination_status(Step5Reserves) == MOI.OPTIMAL
     # Print objective value
     println("Objective value: ", objective_value(Step5Reserves))
 
-    # Save optimal reserve variables.
+    # Save optimal reserve variables and prices.
     rgU_star = value.(rgu[:,:])
     rgD_star = value.(rgd[:,:])
     rwU_star = value.(rwu[:,:])
     rwD_star = value.(rwd[:,:])
+    price_up = dual.(upward[:])
+    price_down = dual.(downward[:])
 
     # Print hourly reserves ( upnward and downward) for each one of the conventional units 
     for t = 1: T
