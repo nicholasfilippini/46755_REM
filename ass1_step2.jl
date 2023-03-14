@@ -60,8 +60,8 @@ sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)                 #Total offer
 @constraint(Step2,[t=1:T,d=1:D], 0 <= pd[t,d] <= demand_cons_hour[t,d] )               # Capacity for demand (MW)
 @constraint(Step2,[t=1:T,g=1:G], 0 <= pg[t,g] <= conv_gen_cap_hour[t,g] )              # Capacity for conventional generator (MW)
 @constraint(Step2,[t=1:T,w=1:W], 0 <= pw[t,w] <= wind_forecast_hour[t,w] )             # Capacity for Wind farms without electrolizer (MW)
-@constraint(Step2,[w=1:H], electrolizer_minpow_cons <= sum(h[t,w] for t=1:T))              # Minimum energy used by electrolizer (MW)
-@constraint(Step2,[t=1:T,w=1:H], h[t,w] <= (wind_forecast_hour[t,w]/2))                     # Electrolizer capacity is max hald of wf capacity
+@constraint(Step2,[w=1:H], electrolizer_minpow_cons <= sum(h[t,w] for t=1:T))          # Minimum energy used by electrolizer (MW)
+@constraint(Step2,[t=1:T,w=1:H], h[t,w] <= (wind_forecast_hour[t,w]/2))                # Electrolizer capacity is max hald of wf capacity
 
 # Elasticity constraint, balancing supply and demand
 @constraint(Step2, powerbalance[t=1:T],

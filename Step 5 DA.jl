@@ -10,7 +10,7 @@ using Plots
 include("Step 5  reserves.jl")
 #**************************************************
 
-#TAKEN FROM STEP 2
+#CODE TAKEN FROM STEP 2 AND ADDED CONSTRAINTS
 #**************************************************
 # Time set 
 T = 24
@@ -36,20 +36,20 @@ hyd_rev_mw = hyd_rev_kg * 18                            # Revenue per MW of hydr
 #**************************************************
 
 # MODEL
-Step2=Model(Gurobi.Optimizer)
+Step5DA=Model(Gurobi.Optimizer)
 
 #**************************************************
 
 #Variables - power in MW
-@variable(Step2,pg[t=1:T,g=1:G] >=0)      #Hourly power generation - Conventional generator g (MW)
-@variable(Step2,pw[t=1:T,w=1:W] >=0)      #Hourly power generation - Wind farm w (MW) 
-@variable(Step2,h[t=1:T,w=1:H] >=0)       #Hourly power demand for electrolizer (MW)
-@variable(Step2,pd[t=1:T,d=1:D] >=0)      #Hourly power demand (MW)
+@variable(Step5DA,pg[t=1:T,g=1:G] >=0)      #Hourly power generation - Conventional generator g (MW)
+@variable(Step5DA,pw[t=1:T,w=1:W] >=0)      #Hourly power generation - Wind farm w (MW) 
+@variable(Step5DA,h[t=1:T,w=1:H] >=0)       #Hourly power demand for electrolizer (MW)
+@variable(Step5DA,pd[t=1:T,d=1:D] >=0)      #Hourly power demand (MW)
 
 #**************************************************
 
 #Objective function
-@objective(Step2, Max, 
+@objective(Step5DA, Max, 
 sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)         #Total offer value 
 -sum(conv_gen_cost_hour[t,g] * pg[t,g] for t=1:T,g=1:G)     #Total value of conventional generator production
 -sum(wind_cost_hour[t,w] * pw[t,w] for t=1:T,w=1:W)         #Total value of wind energy production         
@@ -59,14 +59,14 @@ sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)         #Total offer value
 #**************************************************
 
 # Capacity constraints
-@constraint(Step2,[t=1:T,d=1:D], 0 <= pd[t,d] <= demand_cons_hour[t,d] )                                # Capacity for demand (MW)
-@constraint(Step2,[t=1:T,g=1:G], rgD_star[t,g] <= pg[t,g] <= (conv_gen_cap_hour[t,g] - rgU_star[t,g]))  # Capacity for conventional generator (MW)
-@constraint(Step2,[t=1:T,w=1:W], 0 <= pw[t,w] <= wind_forecast_hour[t,w] )                              # Capacity for Wind farms without electrolizer (MW)
-@constraint(Step2,[w=1:H], electrolizer_minpow_cons + sum(rwU_star[t,w] for t=1:T) <= sum(h[t,w] for t=1:T))                           # Minimum energy used by electrolizer (MW)
-@constraint(Step2,[t=1:T,w=1:H], h[t,w] <= ((wind_forecast_hour_electrolyzer[t,w]/2) - rwD_star[t,w]))                                 # Electrolizer capacity is max hald of wf capacity
+@constraint(Step5DA,[t=1:T,d=1:D], 0 <= pd[t,d] <= demand_cons_hour[t,d] )                                      # Capacity for demand (MW)
+@constraint(Step5DA,[t=1:T,g=1:G], rgD_star[t,g] <= pg[t,g] <= (conv_gen_cap_hour[t,g] - rgU_star[t,g]))        # Capacity for cg (MW) with the reserve optimal value for cg
+@constraint(Step5DA,[t=1:T,w=1:W], 0 <= pw[t,w] <= wind_forecast_hour[t,w] )                                    # Capacity for Wind farms without electrolizer (MW)
+@constraint(Step5DA,[w=1:H], electrolizer_minpow_cons + sum(rwU_star[t,w] for t=1:T) <= sum(h[t,w] for t=1:T))  # Minimum energy used by electrolizer (MW) with the reserve optimal value for WF
+@constraint(Step5DA,[t=1:T,w=1:H], h[t,w] <= ((wind_forecast_hour_electrolyzer[t,w]/2) - rwD_star[t,w]))        # Electrolizer capacity is max half of wf capacity minus the reserve optimal value for WF
 
 # Elasticity constraint, balancing supply and demand
-@constraint(Step2, powerbalance[t=1:T],
+@constraint(Step5DA, powerbalance[t=1:T],
             0 == 
             sum(pd[t,d] for d=1:D) +    # Demand
             sum(h[t,w] for w=1:H) -     # Power needed by electrolizer seen as demand
@@ -76,18 +76,18 @@ sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)         #Total offer value
 
 #************************************************************************
 # Solve
-solution = optimize!(Step2)
+solution = optimize!(Step5DA)
 #**************************************************
 
 # Constructing outputs:
 market_price = zeros(T)
 
 #Check if optimal solution was found
-if termination_status(Step2) == MOI.OPTIMAL
+if termination_status(Step5DA) == MOI.OPTIMAL
     println("Optimal solution found")
 
     # Social welfare 
-    social_welfare = objective_value(Step2)
+    social_welfare = objective_value(Step5DA)
     @printf "\nThe value of the social welfare is: %0.3f\n" social_welfare
     
     # Market clearing price
@@ -115,12 +115,12 @@ if termination_status(Step2) == MOI.OPTIMAL
     for g=1:G
         profit_conv_gen = []
         for t=1:T
-            generation_g = value.(pg[t,g])                      #value of generated power - conventional generator
-            cost_g = conv_gen_cost_hour[t,g]                  #Cost of generated power - conventional generator
+            generation_g = value.(pg[t,g])                          #value of generated power - conventional generator
+            cost_g = conv_gen_cost_hour[t,g]                        #Cost of generated power - conventional generator
             profit_g = generation_g * (market_price[t] - cost_g)    #Profit - conventional generator
             append!(profit_conv_gen, profit_g)
         end
-        total_convgen_profit = sum(profit_conv_gen)             #Total 24H profit for conv gen
+        total_convgen_profit = sum(profit_conv_gen)                 #Total 24H profit for conv gen
         println("The total profit for conventional generator g$(g) = $(total_convgen_profit)")
     end
 
@@ -128,12 +128,12 @@ if termination_status(Step2) == MOI.OPTIMAL
     for w=3:W
         profit_wind = []
         for t=1:T
-            generation_w = value.(pw[t,w])                      #value of generated power - wind farm without electrolizer
-            cost_w = wind_cost_hour[t,w]                      #Cost of generated power - wind farm without electrolizer
+            generation_w = value.(pw[t,w])                          #value of generated power - wind farm without electrolizer
+            cost_w = wind_cost_hour[t,w]                            #Cost of generated power - wind farm without electrolizer
             profit_w = generation_w * (market_price[t] - cost_w)    #Profit - wind farm without electrolizer
             append!(profit_wind, profit_w)
         end
-        total_w_profit = sum(profit_wind)                        #Total 24H profit for wind farm without electrolizer
+        total_w_profit = sum(profit_wind)                           #Total 24H profit for wind farm without electrolizer
         println("The profit of windfarm without electrolizer w$(w) = $(total_w_profit)")
     end
 
@@ -152,7 +152,7 @@ if termination_status(Step2) == MOI.OPTIMAL
         end
         total_w_market_profit = sum(profit_wind_market)  
         total_w_hydrogen_profit = sum(profit_wind_hydrogen)
-        total_w_h_profit = total_w_market_profit + total_w_hydrogen_profit                      #Total 24H profit for wind farm with electrolizer
+        total_w_h_profit = total_w_market_profit + total_w_hydrogen_profit  #Total 24H profit for wind farm with electrolizer
         println("The market profit of windfarm with electrolizer w$(w) = $(total_w_market_profit)")
         println("The hydrogen profit of windfarm with electrolizer w$(w) = $(total_w_hydrogen_profit)")
         println("The total profit of windfarm with electrolizer w$(w) = $(total_w_h_profit)")
