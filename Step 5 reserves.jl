@@ -53,12 +53,15 @@ sum(rgd[t,g] * pdownwardconv[t,g] for t=1:T,g=1:G)            #Total cost of dow
 
 # Capacity constraints for reserves
 
-@constraint(Step5Reserves,[t=1:T,g=1:G], 0 <= rgd[t,g] <= Conv_gen_upward_capability[t,g] )                                 # upward capability for conventional units (MW)
-@constraint(Step5Reserves,[t=1:T,g=1:G], 0 <= rgu[t,g] <= Conv_gen_downward_capability[t,g] )                               # downward capability for conventional units (MW)
-@constraint(Step5Reserves,[t=1:T,w=1:H], 0 <= rwu[t,w] <= Elect_upward_capability[t,w] )                                    # upnward capability for electrolizer units (MW)
-@constraint(Step5Reserves,[t=1:T,w=1:H], 0 <= rwd[t,w] <= Elect_downward_capability[t,w] )                                  # downward capability for electrolizer units (MW)
-@constraint(Step5Reserves, downward[t=1:T], sum(rgd[t,g] for g=1:G) + sum(rwd[t,w] for w=1:H) == 0.15*sum(demand_cons_hour[t, 1:D]))         # Total upnward reserve equal to  15% of total load
-@constraint(Step5Reserves, upward[t=1:T], sum(rgu[t,g] for g=1:G) + sum(rwu[t,w] for w=1:H) == 0.2*sum(demand_cons_hour[t, 1:D]))          # Total upnward reserve equal to  20% of total load
+@constraint(Step5Reserves,[t=1:T,g=1:G], 0 <= rgd[t,g] <= Conv_gen_upward_capability[t,g] )                                                                 # upward capability for conventional units (MW)
+@constraint(Step5Reserves,[t=1:T,g=1:G], 0 <= rgu[t,g] <= Conv_gen_downward_capability[t,g] )                                                               # downward capability for conventional units (MW)
+@constraint(Step5Reserves,[t=1:T,w=1:H], 0 <= rwu[t,w] <= Elect_upward_capability[t,w] )                                                                    # upnward capability for electrolizer units (MW)
+@constraint(Step5Reserves,[t=1:T,w=1:H], 0 <= rwd[t,w] <= Elect_downward_capability[t,w] )                                                                  # downward capability for electrolizer units (MW)
+@constraint(Step5Reserves, downward[t=1:T], sum(rgd[t,g] for g=1:G) + sum(rwd[t,w] for w=1:H) == 0.15*sum(demand_cons_hour[t, 1:D]))                        # Total upnward reserve equal to  15% of total load
+@constraint(Step5Reserves, upward[t=1:T], sum(rgu[t,g] for g=1:G) + sum(rwu[t,w] for w=1:H) == 0.2*sum(demand_cons_hour[t, 1:D]))                           # Total upnward reserve equal to  20% of total load
+
+@constraint(Step5Reserves, [t=1:T,g=1:G], rgu[t,g] + rgd[t,g] <= conv_gen_cap_hour[t,g] )                                                                   # Total reserve for cg is < than their capacity
+@constraint(Step5Reserves, [w=1:H], sum(rwu[t,w] + rwd[t,w] for t=1:T) <= sum(wind_forecast_hour_electrolyzer[t,w]/2 for t=1:T) - electrolizer_minpow_cons) # Upward balancing by electrolyzers < forecasted WF (with electrolyzer) production - 30T 
 
 #************************************************************************
 # Solve
@@ -87,6 +90,7 @@ if termination_status(Step5Reserves) == MOI.OPTIMAL
     price_up = dual.(upward[:])
     price_down = dual.(downward[:])
 
+    #=
     # Print hourly reserves ( upnward and downward) for each one of the conventional units 
     for t = 1: T
          for g = 1 : G
@@ -102,8 +106,16 @@ if termination_status(Step5Reserves) == MOI.OPTIMAL
             println("t$t, electrolizer $w, upward reserve: ", value.(rwd[t,w]))
         end
     end  
+    =#
+   
+
+
+
+
+
 
 
 else 
     println("No optimal solution found")
 end
+
