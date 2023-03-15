@@ -3,12 +3,11 @@ using JuMP
 using Gurobi
 using Printf
 using CSV, DataFrames
-using Plots
 
 
 #**************************************************
 #Get Data
-include("Data_ass1.2.jl")
+include("ass1_data.jl")
 #**************************************************
 # Time set 
 T = 24
@@ -51,7 +50,7 @@ Step2=Model(Gurobi.Optimizer)
 sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)                 #Total offer value 
 -sum(conv_gen_cost_hour[t,g] * pg[t,g] for t=1:T,g=1:G)             #Total value of conventional generator production
 -sum(wind_cost_hour[t,w] * pw[t,w] for t=1:T,w=1:W)              #Total value of wind energy production         
-+sum(hyd_rev_mw * h[t,w] for t=1:T,w=1:H)     # Co optimize for power and hydrogen with fixed revenue of 3$/kg
+#+sum(hyd_rev_mw * h[t,w] for t=1:T,w=1:H)     # Co optimize for power and hydrogen with fixed revenue of 3$/kg
 )
 
 #**************************************************
@@ -60,8 +59,8 @@ sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)                 #Total offer
 @constraint(Step2,[t=1:T,d=1:D], 0 <= pd[t,d] <= demand_cons_hour[t,d] )               # Capacity for demand (MW)
 @constraint(Step2,[t=1:T,g=1:G], 0 <= pg[t,g] <= conv_gen_cap_hour[t,g] )              # Capacity for conventional generator (MW)
 @constraint(Step2,[t=1:T,w=1:W], 0 <= pw[t,w] <= wind_forecast_hour[t,w] )             # Capacity for Wind farms without electrolizer (MW)
-@constraint(Step2,[w=1:H], electrolizer_minpow_cons <= sum(h[t,w] for t=1:T))          # Minimum energy used by electrolizer (MW)
-@constraint(Step2,[t=1:T,w=1:H], h[t,w] <= (wind_forecast_hour[t,w]/2))                # Electrolizer capacity is max hald of wf capacity
+@constraint(Step2,[w=1:H], electrolizer_minpow_cons <= sum(h[t,w] for t=1:T))              # Minimum energy used by electrolizer (MW)
+@constraint(Step2,[t=1:T,w=1:H], h[t,w] <= (wind_forecast_hour[t,w]/2))                     # Electrolizer capacity is max hald of wf capacity
 
 # Elasticity constraint, balancing supply and demand
 @constraint(Step2, powerbalance[t=1:T],
@@ -79,6 +78,7 @@ solution = optimize!(Step2)
 
 # Constructing outputs:
 market_price = zeros(T)
+system_demand = zeros((T,D))
 
 #Check if optimal solution was found
 if termination_status(Step2) == MOI.OPTIMAL
@@ -89,12 +89,12 @@ if termination_status(Step2) == MOI.OPTIMAL
     @printf "\nThe value of the social welfare is: %0.3f\n" social_welfare
     
     # Market clearing price
-    println("Hourly Market clearing price")
     market_price = dual.(powerbalance[:])
-    for t = 1:T
-        println("t$t: ", dual(powerbalance[t]))
-    end
 
+    # System demand
+    system_demand = value.(pd[:,:])
+    
+    #= Remove to print results below
     # Calculate hourly hydrogen production of each electrolizer
     println("Hourly hydrogen production of each electrolizer")
     for t = 1:T
@@ -167,7 +167,7 @@ if termination_status(Step2) == MOI.OPTIMAL
         total_d_utility = sum(demand_utility)
         println("Utility demand of d$(d) = $(total_d_utility)")
     end
-
+    =#
 else
     error("No solution.")
 end

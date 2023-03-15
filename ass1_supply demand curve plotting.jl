@@ -1,0 +1,50 @@
+ #Import libraries
+using JuMP
+using Gurobi
+using Plots
+#**************************************************
+#IMPORT DATA
+# Data of IEEE 24-bus reliability test system
+#include("Data_Project.jl") #figure out on your own
+
+# Define Parameters for cost and capacity of conventional generators and wind farms
+conv_gen_cap = [106.4, 106.4, 245, 413.7, 42, 108.5, 108.5, 280, 280, 210, 217, 245] # Production capacity for conventional generators in MW
+conv_gen_cost = [13.32, 13.32, 20.7, 20.93, 26.11, 10.52, 10.52, 6.02, 5.47, 7,	10.52, 10.89] # Production cost for conventional generators in $/MWh
+wind_cap = [500, 500, 300, 300,	300, 200] # Production capacity for windfarms in MW
+wind_forecast = [120.54, 115.52, 53.34, 38.16, 100, 75] # Day ahead forecast for windfarms in MW
+wind_cost =[0, 0, 0, 0, 0, 0] # Production cost for windfarms in $/MWh
+
+# Define demand variables
+demand_cons = [84, 75, 139,	58,	55,	106, 97, 132, 135, 150,	205, 150, 245, 77, 258,	141, 100] # Consumption demand in MW
+demand_bid = [13, 37, 19, 28, 23, 16, 16, 37, 31, 20, 21, 32, 17, 39, 35, 39, 13] # Cost of demand bids in $/MWh
+
+# Define the supply curve 
+
+s_wind_x1 = sort(wind_forecast)
+s_conv_x2 = [280, 280, 210, 217, 108.5, 108.5, 245, 106.4, 106.4, 245, 413.7, 42]
+supply_x = vcat(s_wind_x1,s_conv_x2)
+
+# running sum
+supply_x_cum = cumsum(supply_x)
+supply_x_cum
+
+
+s_wind_price_x = sort(wind_cost)
+s_wind_price_y = sort(conv_gen_cost)
+supply_y = sort(vcat(conv_gen_cost,wind_cost))
+supply_y
+
+# plot the supply curve
+
+s = plot(supply_x_cum, supply_y, linetype=:step, label="Supply", color="red", xaxis="Power supply/demand [MW]", yaxis="Offer price per MWh")
+
+@show s
+# Define the demand curve 
+ 
+demand_x = sort(demand_cons)
+demand_x_cum = cumsum(demand_x)
+demand_y = sort(demand_bid, rev=true)
+
+#plot the demand curve 
+
+plot!(demand_x_cum,demand_y, linetype=:step, label="Demand", color="green")

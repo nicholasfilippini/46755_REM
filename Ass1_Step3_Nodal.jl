@@ -3,12 +3,11 @@ using JuMP
 using Gurobi
 using Printf
 using CSV, DataFrames
-using Plots
 
 
 #**************************************************
 #Get Data
-include("Data_ass1.2.jl")
+include("ass1_data.jl")
 #**************************************************
 # Time set 
 T = 24
@@ -67,6 +66,7 @@ sum(demand_bid_hour[t,d] * pd[t,d] for t=1:T,d=1:D)                 #Total offer
 @constraint(Step3Nodal,[t=1:T,w=1:H], h[t,w] <= (wind_forecast_hour[t,w]/2))                     # Electrolizer capacity is max hald of wf capacity
 
 # Transmission capacity constraint
+# For sensitivity analysis, change to transm_capacity_sensitivity
 for t=1:T
     for n=1:N
         for m=1:N
@@ -117,15 +117,23 @@ solution = optimize!(Step3Nodal)
 #**************************************************
 
 # Constructing outputs:
-market_price = zeros(T)
+market_price = zeros((T,N))
+electrolyzer_power = zeros((T,H))
+system_demand = zeros((T,D))
 
 #Check if optimal solution was found
 if termination_status(Step3Nodal) == MOI.OPTIMAL
     println("Optimal solution found")
 
+    electrolyzer_power = value.(h[:,:])
+    market_price = dual.(powerbalance[:,:])
+    system_demand = value.(pd[:,:])
+
     # Print objective value
     println("Objective value: ", objective_value(Step3Nodal))
 
+    #= Remove comment to print market clearing price and power flow in transmission lines .
+    
     # Print hourly market price in each node
     println("Hourly Market clearing price")
     market_price = dual.(powerbalance[:])
@@ -134,6 +142,19 @@ if termination_status(Step3Nodal) == MOI.OPTIMAL
             println("t$t, n$n: ", dual(powerbalance[t,n]))
         end
     end
+
+    Print power flow in each transmission line
+    println("Power flow in transmission lines")
+    for t = 1:T
+    for n=1:N
+            for m=1:N
+                if transm_capacity[n,m] != 0
+                    println("t$t, n$n, m$m: ", B*value(theta[t, n] - theta[t, m]))
+                end
+            end
+        end
+    end
+=# 
 
 else 
     println("No optimal solution found")

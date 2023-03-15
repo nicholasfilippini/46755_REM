@@ -8,7 +8,7 @@ using Plots
 
 #**************************************************
 #Get Data
-include("Data_ass1.2.jl")
+include("ass1_data.jl")
 #**************************************************
 # Time set 
 T = 24
@@ -135,5 +135,4 @@ if termination_status(Step3Zonal) == MOI.OPTIMAL
 else 
     println("No optimal solution found")
 end
-
 
