@@ -51,10 +51,10 @@ Step4_1 = Model(Gurobi.Optimizer)
 
 #***********************************************
 
-# Variables
-@variable(Step4_1, hu[t=1:T,w=1:H] >=0)
-@variable(Step4_1, hd[t=1:T,w=1:H] >=0)
-@variable(Step4_1, p_dem_curt[t=1:T] >=0)
+# Decision variables
+@variable(Step4_1, hu[t=1:T,w=1:H] >=0)         # Upward balancing from electrolyzers
+@variable(Step4_1, hd[t=1:T,w=1:H] >=0)         # Downward balancing from electrolyzers
+@variable(Step4_1, p_dem_curt[t=1:T] >=0)       # Curtailment of demand
 
 #***********************************************
 
